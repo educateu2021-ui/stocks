@@ -4,7 +4,17 @@ import numpy as np
 import plotly.express as px
 from datetime import datetime
 import pytesseract
-import cv2
+try:
+    import cv2
+    OCR_AVAILABLE = True
+except ImportError:
+    OCR_AVAILABLE = False
+    if not OCR_AVAILABLE:
+    st.warning("⚠️ OCR not available. Install opencv-python to enable image extraction.")
+else:
+    # OCR code here
+
+
 from PIL import Image
 import os
 
