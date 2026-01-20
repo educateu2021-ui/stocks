@@ -9,10 +9,7 @@ try:
     OCR_AVAILABLE = True
 except ImportError:
     OCR_AVAILABLE = False
-    if not OCR_AVAILABLE:
-    st.warning("⚠️ OCR not available. Install opencv-python to enable image extraction.")
-else:
-    # OCR code here
+    
 
 
 from PIL import Image
