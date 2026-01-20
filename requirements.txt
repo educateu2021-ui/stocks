@@ -1,8 +1,8 @@
-streamlit
-pandas
-numpy
-plotly
-opencv-python
-pillow
-pytesseract
-scikit-learn
+streamlit==1.32.2
+pandas==2.2.2
+numpy==1.26.4
+plotly==5.19.0
+pillow==10.2.0
+pytesseract==0.3.10
+opencv-python-headless==4.9.0.80
+scikit-learn==1.4.2
