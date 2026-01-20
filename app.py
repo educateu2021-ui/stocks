@@ -1,228 +1,159 @@
 import streamlit as st
 import pandas as pd
 import numpy as np
+import plotly.express as px
+from datetime import datetime
+import pytesseract
+import cv2
+from PIL import Image
+import os
 
-# =====================================================
-# PAGE CONFIG
-# =====================================================
-st.set_page_config(
-    page_title="Options Intelligence v4",
-    layout="wide",
-    initial_sidebar_state="expanded"
-)
+# ---------------- CONFIG ----------------
+st.set_page_config(layout="wide", page_title="Options Intelligence V5")
 
-# =====================================================
-# TAILWIND + PREMIUM THEME
-# =====================================================
-st.markdown("""
-<link href="https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css" rel="stylesheet">
-
-<style>
-html, body, [class*="css"] {
-    background: linear-gradient(135deg, #042F2E, #134E4A);
-    color: #ECFEFF;
-    font-family: 'Inter', sans-serif;
-}
-
-.glass {
-    background: rgba(15,118,110,0.35);
-    backdrop-filter: blur(18px);
-    border-radius: 18px;
-    padding: 20px;
-    box-shadow: 0 0 40px rgba(20,184,166,0.25);
-}
-
-.card {
-    transition: all 0.3s ease;
-}
-.card:hover {
-    transform: translateY(-4px);
-    box-shadow: 0 0 50px rgba(94,234,212,0.4);
-}
-
-.fade {
-    animation: fadeIn 0.9s ease-in-out;
-}
-.slide {
-    animation: slideUp 0.9s ease-in-out;
-}
-
-@keyframes fadeIn {
-    from {opacity:0;}
-    to {opacity:1;}
-}
-@keyframes slideUp {
-    from {transform:translateY(25px); opacity:0;}
-    to {transform:translateY(0); opacity:1;}
-}
-
-.btn-glow button {
-    background: linear-gradient(90deg, #14B8A6, #99F6E4);
-    color: #042F2E;
-    font-weight: 800;
-    border-radius: 14px;
-    padding: 12px 22px;
-    box-shadow: 0 0 30px rgba(20,184,166,0.7);
-}
-.btn-glow button:hover {
-    transform: scale(1.06);
-}
-
-.badge-green {
-    background:#14B8A6;
-    color:#042F2E;
-    padding:4px 10px;
-    border-radius:8px;
-    font-weight:700;
-}
-.badge-red {
-    background:#DC2626;
-    color:#FFF;
-    padding:4px 10px;
-    border-radius:8px;
-    font-weight:700;
-}
-.badge-yellow {
-    background:#FACC15;
-    color:#422006;
-    padding:4px 10px;
-    border-radius:8px;
-    font-weight:700;
-}
-</style>
-""", unsafe_allow_html=True)
-
-# =====================================================
-# CONSTANTS
-# =====================================================
 LOT_SIZE = {
     "NIFTY": 65,
     "SENSEX": 20
 }
 
-# =====================================================
-# HEADER
-# =====================================================
-st.markdown("""
-<div class="text-center fade">
-<h1 class="text-5xl font-extrabold text-teal-200">Options Intelligence v4</h1>
-<p class="text-yellow-300 text-lg mt-2">
-Gamma • Max Pain • Expiry Control • Scalp Engine
-</p>
-</div>
-""", unsafe_allow_html=True)
+THEME_COLORS = [
+    "#134E4A", "#0F766E", "#14B8A6",
+    "#FACC15", "#F59E0B", "#DC2626"
+]
 
-st.markdown("---")
+# ---------------- LOGIN ----------------
+USERS = {
+    "trader": {"pwd": "trade123", "role": "trader"},
+    "admin": {"pwd": "admin123", "role": "admin"}
+}
 
-# =====================================================
-# SIDEBAR INPUTS
-# =====================================================
-st.sidebar.markdown("## ⚙️ Inputs")
+def authenticate(u, p):
+    return USERS.get(u, {}).get("role") if USERS.get(u, {}).get("pwd") == p else None
 
+st.sidebar.title("🔐 Login")
+user = st.sidebar.text_input("User")
+pwd = st.sidebar.text_input("Password", type="password")
+role = authenticate(user, pwd)
+
+if not role:
+    st.stop()
+
+# ---------------- INPUTS ----------------
+st.sidebar.title("⚙️ Controls")
 index = st.sidebar.selectbox("Index", ["NIFTY", "SENSEX"])
-capital = st.sidebar.number_input("Capital (₹)", value=20000, step=1000)
-target_profit = st.sidebar.number_input("Expected Profit (₹)", value=1000, step=500)
-mode = st.sidebar.radio("Mode", ["Scalp (2–5₹)", "Market Direction"])
+capital = st.sidebar.number_input("Capital ₹", min_value=5000, value=20000, step=1000)
+expected_profit = st.sidebar.slider("Expected Profit ₹", 2, 5, 3)
 
 lot_size = LOT_SIZE[index]
-st.sidebar.success(f"Lot Size: {lot_size}")
 
-# =====================================================
-# KPI DASHBOARD
-# =====================================================
-k1, k2, k3, k4 = st.columns(4)
+# ---------------- DATA INPUT ----------------
+st.title("📊 Options Intelligence Dashboard")
 
-with k1:
-    st.markdown("<div class='glass card slide'>Market Control<br><b>Sellers</b></div>", unsafe_allow_html=True)
-with k2:
-    st.markdown("<div class='glass card slide'>Gamma Pressure<br><b>High</b></div>", unsafe_allow_html=True)
-with k3:
-    st.markdown("<div class='glass card slide'>Max Pain Gravity<br><b>Active</b></div>", unsafe_allow_html=True)
-with k4:
-    st.markdown("<div class='glass card slide'>Expiry Risk<br><b>Elevated</b></div>", unsafe_allow_html=True)
+tab1, tab2, tab3 = st.tabs(["📥 Upload CSV", "🖼️ Upload Greek Image", "✍️ Manual Entry"])
 
-st.markdown("---")
+df = None
 
-# =====================================================
-# GREEKS INPUT
-# =====================================================
-st.markdown("## 📊 Option Chain (Greeks Required)")
+with tab1:
+    file = st.file_uploader("Upload Option Chain CSV", type="csv")
+    if file:
+        df = pd.read_csv(file)
 
-df = st.data_editor(
-    pd.DataFrame(columns=[
-        "Strike",
-        "CE_LTP","CE_Delta","CE_Gamma","CE_Theta","CE_OI",
-        "PE_LTP","PE_Delta","PE_Gamma","PE_Theta","PE_OI"
-    ]),
-    num_rows="dynamic",
-    use_container_width=True
+with tab2:
+    img = st.file_uploader("Upload Greek Screenshot", type=["png", "jpg"])
+    if img:
+        image = Image.open(img)
+        text = pytesseract.image_to_string(image)
+        rows = []
+        for line in text.split("\n"):
+            parts = line.split()
+            if len(parts) >= 6:
+                rows.append(parts[:6])
+        df = pd.DataFrame(rows, columns=["Strike","CE_LTP","CE_OI","CE_Gamma","PE_LTP","PE_OI"])
+
+with tab3:
+    df = st.data_editor(
+        pd.DataFrame(columns=[
+            "Strike","CE_LTP","CE_OI","CE_Gamma",
+            "PE_LTP","PE_OI","PE_Gamma"
+        ]),
+        num_rows="dynamic"
+    )
+
+if df is None or df.empty:
+    st.stop()
+
+# ---------------- CLEAN DATA ----------------
+for col in df.columns:
+    df[col] = pd.to_numeric(df[col], errors="coerce")
+
+df.dropna(inplace=True)
+
+# ---------------- CORE LOGIC ----------------
+
+# Max Pain
+df["Pain"] = abs(df["Strike"] - df["Strike"].median()) * (df["CE_OI"] + df["PE_OI"])
+max_pain = df.loc[df["Pain"].idxmin(), "Strike"]
+
+# Gamma Pressure
+df["GammaPressure"] = abs(df["PE_Gamma"]) * df["PE_OI"] * lot_size
+
+# Best Scalp Strike
+df["CapitalNeeded"] = df["PE_LTP"] * lot_size
+df_valid = df[df["CapitalNeeded"] <= capital]
+
+best = df_valid.sort_values(
+    by=["GammaPressure","PE_LTP"],
+    ascending=[False, True]
+).iloc[0]
+
+lots = int(capital // best["CapitalNeeded"])
+
+# ---------------- OUTPUT ----------------
+col1, col2, col3 = st.columns(3)
+
+col1.metric("📌 Max Pain", int(max_pain))
+col2.metric("🎯 Selected Strike", int(best["Strike"]))
+col3.metric("📦 Lots", lots)
+
+st.success(
+    f"BUY {index} {int(best['Strike'])} PUT | "
+    f"LTP {best['PE_LTP']} | "
+    f"Target ₹{expected_profit}"
 )
 
-# =====================================================
-# CORE ENGINE LOGIC
-# =====================================================
-def analyze(df):
-    trades = []
+# ---------------- GAMMA HEATMAP ----------------
+fig = px.bar(
+    df,
+    x="Strike",
+    y="GammaPressure",
+    color="GammaPressure",
+    color_continuous_scale=THEME_COLORS
+)
+st.plotly_chart(fig, use_container_width=True)
 
-    for _, r in df.iterrows():
-        try:
-            cost = r.PE_LTP * lot_size
-            lots = int(capital // cost)
-            if lots < 1:
-                continue
+# ---------------- LAST 30 MIN ALARM ----------------
+now = datetime.now().strftime("%H:%M")
+if now >= "14:30":
+    if abs(best["Strike"] - max_pain) / max_pain < 0.002:
+        st.warning("🔔 LAST 30-MINUTE GAMMA RELEASE ZONE")
 
-            per_point = lots * lot_size
-            required_move = target_profit / per_point
+# ---------------- JOURNAL ----------------
+if st.button("🧾 Save Trade"):
+    log = {
+        "Time": datetime.now(),
+        "Index": index,
+        "Strike": best["Strike"],
+        "Lots": lots,
+        "Entry": best["PE_LTP"],
+        "Reason": "Gamma + MaxPain"
+    }
+    pd.DataFrame([log]).to_csv(
+        "trade_journal.csv",
+        mode="a",
+        header=not os.path.exists("trade_journal.csv"),
+        index=False
+    )
+    st.success("Trade logged")
 
-            gamma_ok = r.PE_Gamma > 0.0004
-            delta_ok = -0.70 <= r.PE_Delta <= -0.30
-            theta_ok = abs(r.PE_Theta) < 90
-            scalp_ok = 2 <= required_move <= 5
-
-            if gamma_ok and delta_ok and theta_ok and scalp_ok:
-                score = (
-                    abs(r.PE_Delta)*40 +
-                    r.PE_Gamma*100000 -
-                    abs(r.PE_Theta)*0.3 +
-                    r.PE_OI
-                )
-                trades.append({
-                    "score": score,
-                    "strike": r.Strike,
-                    "lots": lots,
-                    "move": round(required_move,2)
-                })
-        except:
-            pass
-
-    return sorted(trades, key=lambda x: x["score"], reverse=True)
-
-# =====================================================
-# RUN ENGINE
-# =====================================================
-st.markdown("<div class='btn-glow'>", unsafe_allow_html=True)
-run = st.button("🚀 RUN ANALYSIS")
-st.markdown("</div>", unsafe_allow_html=True)
-
-if run:
-    results = analyze(df)
-
-    if not results:
-        st.markdown("""
-        <div class="glass text-center fade">
-        <span class="badge-red">ZERO TRADE</span>
-        <p class="mt-2 text-lg">Risk not acceptable. Capital protected.</p>
-        </div>
-        """, unsafe_allow_html=True)
-    else:
-        best = results[0]
-        st.markdown(f"""
-        <div class="glass slide">
-        <span class="badge-green">HERO SCALP</span>
-        <h3 class="text-2xl mt-2 font-bold">BUY PUT</h3>
-        <p class="mt-2">Strike: <b>{best["strike"]}</b></p>
-        <p>Lots: <b>{best["lots"]}</b></p>
-        <p>Required Move: <b>{best["move"]} ₹</b></p>
-        <p class="mt-3 text-yellow-300">High Gamma • Seller Control • Max Pain Pull</p>
-        </div>
-        """, unsafe_allow_html=True)
+# ---------------- FOOTER ----------------
+st.caption("⚠️ Tool shows probability zones, not predictions. Risk is yours.")
